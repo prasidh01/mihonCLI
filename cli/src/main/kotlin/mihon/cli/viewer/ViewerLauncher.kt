@@ -19,8 +19,9 @@ object ViewerLauncher {
         println("Opening manga with: ${command.joinToString(" ")}")
 
         val processBuilder = ProcessBuilder(command)
-        processBuilder.redirectErrorStream(true)
-        processBuilder.inheritIO()
+        // Discard browser diagnostic stderr/stdout to avoid cluttering terminal UI
+        processBuilder.redirectOutput(ProcessBuilder.Redirect.DISCARD)
+        processBuilder.redirectError(ProcessBuilder.Redirect.DISCARD)
         return processBuilder.start()
     }
 
@@ -43,7 +44,13 @@ object ViewerLauncher {
             val profileDir = File(System.getProperty("user.home"), ".cache/mihon/reader-profile").apply { mkdirs() }
             for (b in KNOWN_APP_BROWSERS) {
                 if (isExecutableAvailable(b)) {
-                    return listOf(b, "--user-data-dir=${profileDir.absolutePath}", "--app=file://${target.absolutePath}")
+                    return listOf(
+                        b,
+                        "--user-data-dir=${profileDir.absolutePath}",
+                        "--app=file://${target.absolutePath}",
+                        "--log-level=3",
+                        "--disable-sync",
+                    )
                 }
             }
             if (isExecutableAvailable("firefox")) {
