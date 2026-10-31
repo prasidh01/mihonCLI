@@ -101,6 +101,29 @@ object TerminalUi {
         println(red("✗ ") + bold(msg))
     }
 
+    fun info(msg: String) {
+        println(cyan("ℹ ") + msg)
+    }
+
+    fun promptWithTimeout(timeoutMs: Long, default: String): String {
+        val start = System.currentTimeMillis()
+        while (System.currentTimeMillis() - start < timeoutMs) {
+            try {
+                if (System.`in`.available() > 0) {
+                    val line = reader.readLine()
+                    return line?.trim().orEmpty()
+                }
+            } catch (_: Exception) {}
+            try {
+                Thread.sleep(100)
+            } catch (_: InterruptedException) {
+                break
+            }
+        }
+        println()
+        return default
+    }
+
     fun prompt(message: String): String? {
         print(message)
         System.out.flush()

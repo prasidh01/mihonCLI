@@ -8,6 +8,7 @@ object ViewerLauncher {
 
     private val KNOWN_CBZ_VIEWERS = listOf("zathura", "mcomix", "yacreader", "evince")
     private val KNOWN_IMAGE_VIEWERS = listOf("imv", "feh", "qview", "sxiv", "nsxiv", "eog")
+    private val KNOWN_APP_BROWSERS = listOf("chromium", "google-chrome", "brave", "microsoft-edge")
 
     fun launch(target: File, customViewer: String? = null): Process {
         if (!target.exists()) {
@@ -24,6 +25,7 @@ object ViewerLauncher {
     }
 
     private fun buildCommand(target: File, customViewer: String?): List<String> {
+        val isHtml = target.isFile && (target.name.endsWith(".html", ignoreCase = true) || target.name.endsWith(".htm", ignoreCase = true))
         val isCbz = target.isFile && target.name.endsWith(".cbz", ignoreCase = true)
 
         if (!customViewer.isNullOrBlank()) {
@@ -36,7 +38,24 @@ object ViewerLauncher {
             return listOf(viewerBin, target.absolutePath)
         }
 
-        // Auto-detect viewer
+        // 1. HTML Longstrip mode
+        if (isHtml) {
+            val profileDir = File(System.getProperty("user.home"), ".cache/mihon/reader-profile").apply { mkdirs() }
+            for (b in KNOWN_APP_BROWSERS) {
+                if (isExecutableAvailable(b)) {
+                    return listOf(b, "--user-data-dir=${profileDir.absolutePath}", "--app=file://${target.absolutePath}")
+                }
+            }
+            if (isExecutableAvailable("firefox")) {
+                return listOf("firefox", "--new-window", target.absolutePath)
+            }
+            if (isExecutableAvailable("xdg-open")) {
+                return listOf("xdg-open", target.absolutePath)
+            }
+            throw IllegalStateException("No suitable browser found to open Longstrip HTML reader. Please install Chromium, Firefox, or specify --viewer.")
+        }
+
+        // 2. CBZ file
         if (isCbz) {
             for (v in KNOWN_CBZ_VIEWERS) {
                 if (isExecutableAvailable(v)) {
@@ -53,7 +72,7 @@ object ViewerLauncher {
                 return listOf("xdg-open", target.absolutePath)
             }
         } else {
-            // Target is a directory of images
+            // 3. Directory of images
             for (v in KNOWN_IMAGE_VIEWERS) {
                 if (isExecutableAvailable(v)) {
                     return listOf(v, target.absolutePath)

@@ -8,8 +8,13 @@ import eu.kanade.tachiyomi.source.model.SManga
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
+import mihon.cli.cleanup.AutoCleanupManager
 import mihon.cli.downloader.MangaDownloader
 import mihon.cli.store.SourceManager
+import mihon.cli.ui.InteractiveNavigator
+import mihon.cli.ui.TerminalUi
+import mihon.cli.viewer.LongstripViewer
+import mihon.cli.viewer.ReadingMode
 import mihon.cli.viewer.ViewerLauncher
 import java.io.File
 import java.text.SimpleDateFormat
@@ -209,25 +214,92 @@ object MangaCommands {
         mangaUrl: String,
         chapterSpec: String,
         sourceName: String?,
-        destDir: File,
-        customViewer: String?,
+        destDir: File? = null,
+        customViewer: String? = null,
+        mode: ReadingMode = ReadingMode.LONGSTRIP,
+        autoAdvance: Boolean = true,
     ) {
-        val downloaded = download(
-            sourceManager = sourceManager,
-            downloader = downloader,
-            mangaUrl = mangaUrl,
-            chapterSpec = chapterSpec,
-            sourceName = sourceName,
-            destDir = destDir,
-            asCbz = true,
-        )
+        val source = sourceManager.findSource(sourceName)
+        val mangaObj = SManga.create().apply { url = mangaUrl }
+        println("Fetching chapter list from ${source.name}...")
+        val update = source.getMangaUpdate(mangaObj, emptyList(), fetchDetails = true, fetchChapters = true)
+        val manga = update.manga
+        val allChapters = update.chapters
 
-        if (downloaded.isEmpty()) {
-            throw IllegalStateException("No files downloaded.")
+        if (allChapters.isEmpty()) {
+            throw IllegalStateException("No chapters found for this manga.")
         }
 
-        val target = downloaded.first()
-        ViewerLauncher.launch(target, customViewer)
+        val initialChapter = filterChapters(allChapters, chapterSpec).firstOrNull()
+            ?: throw IllegalArgumentException("No chapters matched '$chapterSpec'.")
+
+        val readerCacheBase = destDir ?: File(System.getProperty("user.home"), ".cache/mihon/reader").apply { mkdirs() }
+        AutoCleanupManager.cleanOrphanedCache(readerCacheBase)
+
+        var currentChapter: SChapter? = initialChapter
+
+        while (currentChapter != null) {
+            val nextChapter = InteractiveNavigator.findNextChapter(allChapters, currentChapter)
+
+            println("\n[Reading] ${manga.title} - ${currentChapter.name}")
+            println("Viewing Mode: ${mode.label}")
+            print("Downloading pages... ")
+            System.out.flush()
+
+            var lastReported = 0
+            val downloadedTarget = downloader.downloadChapter(
+                source = source,
+                manga = manga,
+                chapter = currentChapter,
+                destinationDir = readerCacheBase,
+                asCbz = (mode == ReadingMode.PAGINATED),
+                onProgress = { current, total ->
+                    val pct = (current * 100) / total
+                    if (pct >= lastReported + 25 || current == total) {
+                        lastReported = pct
+                        print("$pct% ")
+                        System.out.flush()
+                    }
+                }
+            )
+            println("✓ Done")
+
+            val (launchTarget, deleteTarget) = if (mode == ReadingMode.LONGSTRIP) {
+                val htmlFile = LongstripViewer.createHtml(
+                    chapterDir = downloadedTarget,
+                    mangaTitle = manga.title,
+                    chapterName = currentChapter.name,
+                    nextChapterName = nextChapter?.name
+                )
+                Pair(htmlFile, downloadedTarget)
+            } else {
+                Pair(downloadedTarget, downloadedTarget)
+            }
+
+            println("Launching viewer for '${currentChapter.name}'...")
+            val process = ViewerLauncher.launch(launchTarget, customViewer)
+            process.waitFor()
+
+            // Auto-cleanup after 5 minutes
+            AutoCleanupManager.scheduleDeletion(deleteTarget, delaySeconds = 300)
+            println("✓ Finished reading '${currentChapter.name}'! (Chapter cache will be deleted in 5 minutes)")
+
+            if (autoAdvance && nextChapter != null) {
+                println("\nNext chapter available: ${nextChapter.name}")
+                print("Auto-opening next chapter in 2 seconds... (Press 'q' + Enter to stop): ")
+                System.out.flush()
+                val userResponse = TerminalUi.promptWithTimeout(2000, default = "continue")
+                if (userResponse.lowercase() in listOf("q", "quit", "stop", "exit")) {
+                    break
+                }
+                currentChapter = nextChapter
+            } else {
+                if (nextChapter == null) {
+                    println("🎉 You have reached the latest available chapter!")
+                }
+                break
+            }
+        }
     }
 
     private fun filterChapters(chapters: List<SChapter>, spec: String): List<SChapter> {

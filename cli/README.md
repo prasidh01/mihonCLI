@@ -30,8 +30,11 @@ Typing `extension list` presents an interactive navigation flow matching the And
    - **Search Manga / Manhwa:** Search titles within that specific extension.
 3. **Select a Title:** Displays full details (Author, Artist, Status, Genres, Synopsis, Total chapters).
 4. **Read or Download:**
-   - **`[r]` Read Chapter:** Download chapter on-the-fly and launch your desktop viewer (`imv`, `zathura`, `feh`, `xdg-open`).
-   - **`[d]` Download Chapter(s):** Download single chapters, ranges (e.g. `1-10`), or `all` chapters into `.cbz` comic book archives.
+   - **`[r]` Read Chapter:**
+     - **Viewing Modes:** Choose **Longstrip (Webtoon / Continuous Vertical)** with zero gaps and seamless scrolling, or **Standard Paginated** (`imv`).
+     - **Auto Next Chapter:** Automatically advances into the next available chapter upon completing the current one.
+     - **5-Minute Auto-Cleanup:** Chapter cache is automatically purged from your system 5 minutes after finishing reading it.
+   - **`[d]` Download Chapter(s):** Download single chapters, ranges (e.g. `1-10`), or `all` chapters into permanent `.cbz` comic book archives in `~/Manga`.
    - **`[l]` List Chapters:** Paginate and browse all chapters.
 
 ### 2. Interactive Extension Store (`extension install` or `mihon extension install`)
@@ -40,6 +43,32 @@ Typing `extension install` displays all available extensions in the Keiyoushi re
 - **Search & Filter:** Press `[s]` to search by keyword (e.g. `manhwa`, `asura`, `flame`), or `[l]` to filter by language (`en`, `ko`, `ja`, etc.).
 - **1-Click Install:** Enter the number of any extension to download, transpile, and install it.
 - **Immediate Browsing:** Automatically prompts you to start browsing manga in the newly installed extension right away.
+
+---
+
+## 📖 Enhanced Reading Features
+
+### 🌟 Longstrip (Webtoon) Mode
+Manhwa and Webtoons are designed to be read vertically as one continuous canvas. Mihon CLI's Longstrip mode:
+- **Zero Gaps & Zero Pagebreaks:** Seamlessly stacks panels vertically with 0px margins.
+- **Progress Tracking:** Floating status pill and top progress bar indicating scroll percentage.
+- **Full Keyboard Navigation:**
+  - `J` / `↓`: Smooth scroll down
+  - `K` / `↑`: Smooth scroll up
+  - `Space` / `PageDown`: Page down
+  - `W`: Cycle width mode (Standard 860px → Wide 1200px → Full 100%)
+  - `F`: Toggle Fullscreen
+  - `Q` / `Esc`: Close reader & proceed to next chapter
+- **Frameless App Window:** Opens directly as a native-feeling standalone window via Chromium app mode or your system default browser.
+
+### ⏱️ Automatic 5-Minute Cache Cleanup
+- When reading manga, chapters are downloaded to temporary cache (`~/.cache/mihon/reader`).
+- The moment you close the reader after finishing a chapter, a background timer is armed to automatically delete the downloaded chapter files **5 minutes later**.
+- Spawns as a detached background task, guaranteeing cleanup even if you exit the CLI. Permanent downloads (`mihon download`) remain safely kept in `~/Manga`.
+
+### 🔄 Direct Auto-Advance to Next Chapter
+- When you finish reading a chapter, Mihon detects chapter completion and automatically queues the next chronological chapter.
+- A 2-second countdown prompt lets you hit Enter to open immediately, or press `q` to stop and return to the menu.
 
 ---
 

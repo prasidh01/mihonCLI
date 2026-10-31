@@ -8,6 +8,7 @@ import eu.kanade.tachiyomi.source.model.SManga
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
+import mihon.cli.cleanup.AutoCleanupManager
 import mihon.cli.commands.ExtensionCommands
 import mihon.cli.commands.MangaCommands
 import mihon.cli.downloader.MangaDownloader
@@ -16,6 +17,8 @@ import mihon.cli.loader.LoadedExtension
 import mihon.cli.store.ExtensionStoreManager
 import mihon.cli.store.KeiyoushiRepo
 import mihon.cli.store.SourceManager
+import mihon.cli.viewer.LongstripViewer
+import mihon.cli.viewer.ReadingMode
 import mihon.cli.viewer.ViewerLauncher
 import java.io.File
 import java.text.SimpleDateFormat
@@ -420,7 +423,7 @@ object InteractiveNavigator {
                     // Check if user directly entered a chapter number or row index to read!
                     val resolved = resolveChapter(allChapters, choice)
                     if (resolved != null) {
-                        readSpecificChapter(source, manga, resolved, downloader)
+                        startReadingSession(source, manga, allChapters, resolved, downloader)
                     } else {
                         TerminalUi.warn("Invalid choice '$choice'. Please select r, d, l, or b.")
                     }
@@ -449,40 +452,107 @@ object InteractiveNavigator {
             return
         }
 
-        readSpecificChapter(source, manga, target, downloader)
+        startReadingSession(source, manga, allChapters, target, downloader)
     }
 
-    private suspend fun readSpecificChapter(
+    private suspend fun startReadingSession(
         source: CatalogueSource,
         manga: SManga,
-        chapter: SChapter,
+        allChapters: List<SChapter>,
+        initialChapter: SChapter,
         downloader: MangaDownloader,
     ) {
-        TerminalUi.status("Preparing '${chapter.name}' for reading...")
-        val destDir = File(System.getProperty("user.home"), "Manga")
-        try {
+        val isManhwaOrWebtoon = manga.genre?.lowercase()?.let {
+            it.contains("manhwa") || it.contains("webtoon") || it.contains("vertical")
+        } == true || source.name.lowercase().let { it.contains("asura") || it.contains("flame") }
+
+        println("\nViewing Mode:")
+        println("  ${TerminalUi.yellow("[1]")} ${TerminalUi.bold("Longstrip (Continuous Vertical / Manhwa Webtoon)")} ${if (isManhwaOrWebtoon) TerminalUi.green("[Recommended for Manhwa - Zero gaps]") else "[Default]"}")
+        println("  ${TerminalUi.yellow("[2]")} Standard Paginated (Single page images via imv / default viewer)")
+        val modeChoice = TerminalUi.promptChoice("Select viewing mode", default = "1")
+        val readingMode = if (modeChoice == "2") ReadingMode.PAGINATED else ReadingMode.LONGSTRIP
+
+        val readerCacheBase = File(System.getProperty("user.home"), ".cache/mihon/reader").apply { mkdirs() }
+        AutoCleanupManager.cleanOrphanedCache(readerCacheBase)
+
+        var currentChapter: SChapter? = initialChapter
+
+        while (currentChapter != null) {
+            TerminalUi.subHeader("Reading: ${manga.title} > ${currentChapter.name}")
+            TerminalUi.status("Mode: ${readingMode.label}")
+            print("  Preparing chapter pages... ")
+            System.out.flush()
+
+            val nextChapter = findNextChapter(allChapters, currentChapter)
+
             var lastReported = 0
-            val file = downloader.downloadChapter(
-                source = source,
-                manga = manga,
-                chapter = chapter,
-                destinationDir = destDir,
-                asCbz = true,
-                onProgress = { current, total ->
-                    val pct = (current * 100) / total
-                    if (pct >= lastReported + 25 || current == total) {
-                        lastReported = pct
-                        print("$pct% ")
-                        System.out.flush()
+            val downloadedTarget = try {
+                downloader.downloadChapter(
+                    source = source,
+                    manga = manga,
+                    chapter = currentChapter,
+                    destinationDir = readerCacheBase,
+                    asCbz = (readingMode == ReadingMode.PAGINATED),
+                    onProgress = { current, total ->
+                        val pct = (current * 100) / total
+                        if (pct >= lastReported + 25 || current == total) {
+                            lastReported = pct
+                            print("$pct% ")
+                            System.out.flush()
+                        }
                     }
+                )
+            } catch (e: Exception) {
+                println()
+                TerminalUi.error("Failed to download chapter '${currentChapter.name}': ${e.message}")
+                val retry = TerminalUi.promptConfirm("Retry downloading this chapter?", default = true)
+                if (retry) continue else break
+            }
+
+            println(TerminalUi.green("✓ Ready!"))
+
+            val (launchTarget, deleteTarget) = if (readingMode == ReadingMode.LONGSTRIP) {
+                val htmlFile = LongstripViewer.createHtml(
+                    chapterDir = downloadedTarget,
+                    mangaTitle = manga.title,
+                    chapterName = currentChapter.name,
+                    nextChapterName = nextChapter?.name
+                )
+                Pair(htmlFile, downloadedTarget)
+            } else {
+                Pair(downloadedTarget, downloadedTarget)
+            }
+
+            TerminalUi.status("Launching reader for '${currentChapter.name}'...")
+            val process = try {
+                ViewerLauncher.launch(launchTarget)
+            } catch (e: Exception) {
+                TerminalUi.error("Failed to launch viewer: ${e.message}")
+                break
+            }
+
+            TerminalUi.info("Reading active. Close the reader window when finished.")
+            process.waitFor()
+
+            // Schedule deletion 5 minutes after reading completion
+            AutoCleanupManager.scheduleDeletion(deleteTarget, delaySeconds = 300)
+            TerminalUi.success("Finished reading '${currentChapter.name}'! (Chapter cache will be deleted in 5 minutes)")
+
+            // Auto-advance to next chapter if available
+            if (nextChapter != null) {
+                println("\nNext chapter: ${TerminalUi.bold(nextChapter.name)}")
+                print("Auto-opening next chapter in 2 seconds... (Press 'q' + Enter to stop, or Enter to open now): ")
+                System.out.flush()
+                val userResponse = TerminalUi.promptWithTimeout(2000, default = "continue")
+                if (userResponse.lowercase() in listOf("q", "quit", "stop", "exit", "b", "back")) {
+                    TerminalUi.status("Reading session ended.")
+                    break
                 }
-            )
-            println(TerminalUi.green(" ✓ Ready!"))
-            TerminalUi.status("Launching desktop viewer for ${file.name}...")
-            val process = ViewerLauncher.launch(file)
-            TerminalUi.success("Opened '${chapter.name}' in viewer.")
-        } catch (e: Exception) {
-            TerminalUi.error("Failed to download or view chapter: ${e.message}")
+                currentChapter = nextChapter
+            } else {
+                TerminalUi.info("🎉 You have caught up to the latest chapter!")
+                break
+            }
         }
     }
 
@@ -598,7 +668,7 @@ object InteractiveNavigator {
                 else -> {
                     val resolved = resolveChapter(allChapters, input)
                     if (resolved != null) {
-                        readSpecificChapter(source, manga, resolved, downloader)
+                        startReadingSession(source, manga, allChapters, resolved, downloader)
                     } else {
                         TerminalUi.warn("Please enter a valid chapter number, 'n', 'p', or 'b'.")
                     }
@@ -915,6 +985,41 @@ object InteractiveNavigator {
 
     private fun formatChapterNum(num: Float): String {
         return if (num % 1f == 0f) num.toInt().toString() else num.toString()
+    }
+
+    fun findNextChapter(allChapters: List<SChapter>, current: SChapter): SChapter? {
+        if (allChapters.isEmpty()) return null
+
+        // 1. By numerical chapter_number if valid (> 0)
+        if (current.chapter_number >= 0) {
+            val candidates = allChapters.filter { it.chapter_number > current.chapter_number }
+            if (candidates.isNotEmpty()) {
+                return candidates.minByOrNull { it.chapter_number }
+            }
+        }
+
+        // 2. Fallback to list position (Tachiyomi sources list newest chapter at index 0)
+        val idx = allChapters.indexOfFirst { it.url == current.url }
+        if (idx != -1) {
+            val isNewestFirst = if (allChapters.size >= 2) {
+                val firstNum = allChapters.first().chapter_number
+                val lastNum = allChapters.last().chapter_number
+                if (firstNum >= 0 && lastNum >= 0) firstNum > lastNum else true
+            } else {
+                true
+            }
+
+            val nextIdx = if (isNewestFirst) idx - 1 else idx + 1
+            if (nextIdx in allChapters.indices) {
+                return allChapters[nextIdx]
+            }
+        }
+
+        return null
+    }
+
+    private fun sanitizeFileName(name: String): String {
+        return name.replace(Regex("[\\\\/:*?\"<>|]"), "_").trim()
     }
 
     private fun printHelp() {

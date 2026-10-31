@@ -9,6 +9,7 @@ import mihon.cli.store.ExtensionStoreManager
 import mihon.cli.store.SourceManager
 import mihon.cli.ui.InteractiveNavigator
 import mihon.cli.ui.TerminalUi
+import mihon.cli.viewer.ReadingMode
 import java.io.File
 import kotlin.system.exitProcess
 
@@ -234,7 +235,7 @@ private suspend fun handleRead(
 ) {
     if (args.isEmpty() || args[0] in listOf("-h", "--help")) {
         println("Usage:")
-        println("  mihon read <manga-url> --chapter <spec> [--source <name>] [--viewer <cmd>]")
+        println("  mihon read <manga-url> [--chapter <spec>] [--source <name>] [--mode <longstrip|standard>] [--no-auto-advance] [--viewer <cmd>]")
         return
     }
 
@@ -242,12 +243,15 @@ private suspend fun handleRead(
     val source = getFlagValue(args, "--source", "-s")
     val viewer = getFlagValue(args, "--viewer", "-v")
     val destStr = getFlagValue(args, "--dest", "-d")
-    val destDir = if (destStr != null) File(destStr) else File(System.getProperty("user.home"), "Manga")
+    val destDir = if (destStr != null) File(destStr) else null
+    val modeStr = getFlagValue(args, "--mode", "-m")?.lowercase()
+    val mode = if (modeStr == "standard" || modeStr == "paginated") ReadingMode.PAGINATED else ReadingMode.LONGSTRIP
+    val autoAdvance = !args.contains("--no-auto-advance")
 
-    val mangaUrl = args.firstOrNull { it != chapter && it != source && it != viewer && it != destStr && !it.startsWith("-") }
+    val mangaUrl = args.firstOrNull { it != chapter && it != source && it != viewer && it != destStr && it != modeStr && !it.startsWith("-") }
         ?: throw IllegalArgumentException("Missing manga URL argument")
 
-    MangaCommands.read(sourceManager, downloader, mangaUrl, chapter, source, destDir, viewer)
+    MangaCommands.read(sourceManager, downloader, mangaUrl, chapter, source, destDir, viewer, mode, autoAdvance)
 }
 
 private fun getFlagValue(args: List<String>, vararg flags: String): String? {
