@@ -309,8 +309,17 @@ class ExtensionLoader(
                                                 insns.remove(n2)
                                             }
                                         } else {
-                                            // Dummy argument passed to method
-                                            insns.set(current, org.objectweb.asm.tree.InsnNode(Opcodes.ACONST_NULL))
+                                            val methodTarget = n3 as? org.objectweb.asm.tree.MethodInsnNode
+                                            if (methodTarget != null && methodTarget.desc.contains("Ljava/util/Comparator;")) {
+                                                insns.set(current, org.objectweb.asm.tree.FieldInsnNode(
+                                                    Opcodes.GETSTATIC,
+                                                    "mihon/cli/loader/NoopComparator",
+                                                    "INSTANCE",
+                                                    "Lmihon/cli/loader/NoopComparator;"
+                                                ))
+                                            } else {
+                                                insns.set(current, org.objectweb.asm.tree.InsnNode(Opcodes.ACONST_NULL))
+                                            }
                                             insns.remove(n1)
                                             insns.remove(n2)
                                         }

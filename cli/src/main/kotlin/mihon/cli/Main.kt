@@ -7,15 +7,12 @@ import mihon.cli.downloader.MangaDownloader
 import mihon.cli.loader.ExtensionLoader
 import mihon.cli.store.ExtensionStoreManager
 import mihon.cli.store.SourceManager
+import mihon.cli.ui.InteractiveNavigator
+import mihon.cli.ui.TerminalUi
 import java.io.File
 import kotlin.system.exitProcess
 
 fun main(args: Array<String>) {
-    if (args.isEmpty() || args[0] in listOf("-h", "--help", "help")) {
-        printUsage()
-        return
-    }
-
     val storeManager = ExtensionStoreManager()
     val loader = ExtensionLoader()
     val sourceManager = SourceManager(storeManager, loader)
@@ -24,12 +21,37 @@ fun main(args: Array<String>) {
     val debug = args.contains("--debug")
     val cleanArgs = args.filter { it != "--debug" }
 
+    // If no arguments provided, launch the interactive Android-like main menu
+    if (cleanArgs.isEmpty()) {
+        try {
+            runBlocking {
+                InteractiveNavigator.mainMenu(sourceManager, storeManager, loader, downloader)
+            }
+            exitProcess(0)
+        } catch (e: Exception) {
+            System.err.println("\nError: ${e.message}")
+            if (debug) e.printStackTrace()
+            exitProcess(1)
+        }
+    }
+
+    if (cleanArgs[0] in listOf("-h", "--help", "help")) {
+        printUsage()
+        return
+    }
+
     try {
         runBlocking {
             when (cleanArgs[0].lowercase()) {
-                "extension", "ext" -> handleExtension(cleanArgs.drop(1), storeManager, sourceManager, loader)
-                "sources" -> ExtensionCommands.list(storeManager, sourceManager, remote = false, query = null, lang = null)
-                "search" -> handleSearch(cleanArgs.drop(1), sourceManager)
+                "extension", "ext" -> handleExtension(cleanArgs.drop(1), storeManager, sourceManager, loader, downloader)
+                "sources" -> {
+                    if (cleanArgs.contains("--no-interactive")) {
+                        ExtensionCommands.list(storeManager, sourceManager, remote = false, query = null, lang = null)
+                    } else {
+                        InteractiveNavigator.browseInstalledExtensions(sourceManager, downloader, storeManager, loader)
+                    }
+                }
+                "search" -> handleSearch(cleanArgs.drop(1), sourceManager, downloader)
                 "info" -> handleInfo(cleanArgs.drop(1), sourceManager)
                 "download" -> handleDownload(cleanArgs.drop(1), sourceManager, downloader)
                 "read" -> handleRead(cleanArgs.drop(1), sourceManager, downloader)
@@ -51,58 +73,94 @@ fun main(args: Array<String>) {
     }
 }
 
-private fun handleExtension(
+private suspend fun handleExtension(
     args: List<String>,
     storeManager: ExtensionStoreManager,
     sourceManager: SourceManager,
     loader: ExtensionLoader,
+    downloader: MangaDownloader,
 ) {
-    if (args.isEmpty() || args[0] in listOf("-h", "--help", "help")) {
-        println("Usage:")
-        println("  mihon extension list [--remote] [--query <term>] [--lang <code>]")
-        println("  mihon extension install <package-name>")
-        println("  mihon extension uninstall <package-name>")
+    if (args.isEmpty()) {
+        // 'mihon extension' with no subcommand opens the extension list browser
+        InteractiveNavigator.browseInstalledExtensions(sourceManager, downloader, storeManager, loader)
         return
     }
 
-    when (args[0].lowercase()) {
+    val subCmd = args[0].lowercase()
+    val subArgs = args.drop(1)
+
+    when (subCmd) {
         "list", "ls" -> {
-            val remote = args.contains("--remote") || args.contains("-r")
-            val query = getFlagValue(args, "--query", "-q")
-            val lang = getFlagValue(args, "--lang", "-l")
-            ExtensionCommands.list(storeManager, sourceManager, remote, query, lang)
+            val remote = subArgs.contains("--remote") || subArgs.contains("-r")
+            val nonInteractive = subArgs.contains("--no-interactive")
+            val query = getFlagValue(subArgs, "--query", "-q")
+            val lang = getFlagValue(subArgs, "--lang", "-l")
+
+            if (remote) {
+                if (nonInteractive) {
+                    ExtensionCommands.list(storeManager, sourceManager, remote = true, query, lang)
+                } else {
+                    InteractiveNavigator.browseExtensionStore(storeManager, loader, sourceManager, downloader, initialQuery = query)
+                }
+            } else {
+                if (nonInteractive) {
+                    ExtensionCommands.list(storeManager, sourceManager, remote = false, query, lang)
+                } else {
+                    InteractiveNavigator.browseInstalledExtensions(sourceManager, downloader, storeManager, loader)
+                }
+            }
         }
         "install", "i", "add" -> {
-            if (args.size < 2) {
-                System.err.println("Error: Package name required. E.g.: mihon extension install eu.kanade.tachiyomi.extension.en.mangadex")
-                exitProcess(1)
-            }
-            ExtensionCommands.install(storeManager, loader, args[1])
+            // "when the user types extension install it should show all available extensions which can be downloaded"
+            val query = if (subArgs.isNotEmpty() && !subArgs[0].startsWith("-")) subArgs[0] else null
+            InteractiveNavigator.browseExtensionStore(storeManager, loader, sourceManager, downloader, initialQuery = query)
         }
         "uninstall", "rm", "remove" -> {
-            if (args.size < 2) {
-                System.err.println("Error: Package name required. E.g.: mihon extension uninstall eu.kanade.tachiyomi.extension.en.mangadex")
-                exitProcess(1)
+            if (subArgs.isEmpty()) {
+                val installed = sourceManager.loadAllInstalled()
+                if (installed.isEmpty()) {
+                    println("No extensions are currently installed.")
+                    return
+                }
+                println("Installed Extensions:")
+                for ((idx, ext) in installed.withIndex()) {
+                    println("  [${idx + 1}] ${ext.name} (${ext.pkgName})")
+                }
+                val pick = TerminalUi.promptChoice("Enter extension number to uninstall (1-${installed.size})", default = "")
+                val num = pick.toIntOrNull()
+                if (num != null && num in 1..installed.size) {
+                    ExtensionCommands.uninstall(storeManager, installed[num - 1].pkgName)
+                }
+            } else {
+                ExtensionCommands.uninstall(storeManager, subArgs[0])
             }
-            ExtensionCommands.uninstall(storeManager, args[1])
         }
         else -> {
-            System.err.println("Unknown extension subcommand: '${args[0]}'")
+            System.err.println("Unknown extension subcommand: '${args[0]}'. Use 'mihon extension list' or 'mihon extension install'.")
             exitProcess(1)
         }
     }
 }
 
-private suspend fun handleSearch(args: List<String>, sourceManager: SourceManager) {
+private suspend fun handleSearch(
+    args: List<String>,
+    sourceManager: SourceManager,
+    downloader: MangaDownloader,
+) {
     if (args.isEmpty() || args[0] in listOf("-h", "--help")) {
-        println("Usage:")
-        println("  mihon search <query> [--source <name>] [--page <n>]")
+        val promptQuery = TerminalUi.prompt(TerminalUi.cyan("Enter search title or keyword: "))
+        if (!promptQuery.isNullOrBlank()) {
+            InteractiveNavigator.quickSearchAcrossSources(sourceManager, promptQuery, downloader)
+        } else {
+            println("Usage: mihon search <query> [--source <name>] [--page <n>]")
+        }
         return
     }
 
     val source = getFlagValue(args, "--source", "-s")
     val pageStr = getFlagValue(args, "--page", "-p")
     val page = pageStr?.toIntOrNull() ?: 1
+    val nonInteractive = args.contains("--no-interactive")
 
     // Collect query words (ignoring flags)
     val queryParts = mutableListOf<String>()
@@ -111,6 +169,8 @@ private suspend fun handleSearch(args: List<String>, sourceManager: SourceManage
         val arg = args[i]
         if (arg in listOf("--source", "-s", "--page", "-p")) {
             i += 2
+        } else if (arg == "--no-interactive") {
+            i += 1
         } else {
             queryParts.add(arg)
             i++
@@ -118,7 +178,11 @@ private suspend fun handleSearch(args: List<String>, sourceManager: SourceManage
     }
     val query = queryParts.joinToString(" ")
 
-    MangaCommands.search(sourceManager, query, source, page)
+    if (source.isNullOrBlank() && !nonInteractive) {
+        InteractiveNavigator.quickSearchAcrossSources(sourceManager, query, downloader)
+    } else {
+        MangaCommands.search(sourceManager, query, source, page)
+    }
 }
 
 private suspend fun handleInfo(args: List<String>, sourceManager: SourceManager) {
@@ -196,32 +260,25 @@ private fun getFlagValue(args: List<String>, vararg flags: String): String? {
 }
 
 private fun printUsage() {
-    val banner = """
-   __  ____ __              ________    ____
-  /  |/  (_) /_  ____  ____/ / ____/   /  _/
- / /|_/ / / __ \/ __ \/ __  / /       / /  
-/ /  / / / / / / /_/ / /_/ / /___   _/ /   
-/_/  /_/_/_/ /_/\____/\__,_/\____/  /___/   
-Mihon CLI - Native Manga Reader & Keiyoushi Extension Engine
-"""
-    println(banner)
+    TerminalUi.banner()
     println("USAGE:")
-    println("  mihon <command> [options]\n")
-    println("COMMANDS:")
-    println("  extension list [--remote] [-q query] [-l lang]  List installed or remote extensions")
-    println("  extension install <package-name>               Download & install extension from Keiyoushi")
-    println("  extension uninstall <package-name>             Remove installed extension")
-    println("  sources                                        Quick view of installed sources")
-    println("  search <query> [-s source] [-p page]           Search manga across installed sources")
-    println("  info <manga-url> [-s source]                   Display manga details and chapter list")
-    println("  download <url> -c <chapter> [-s src] [--raw]   Download chapters to CBZ (or folder)")
-    println("  read <url> -c <chapter> [-s src] [-v viewer]   Download and open chapter in viewer")
-    println("  help                                           Show this help manual\n")
+    println("  mihon [command] [options]\n")
+    println("INTERACTIVE COMMANDS:")
+    println("  mihon                               Launch interactive Android-like Mihon Dashboard")
+    println("  mihon extension list                Browse installed extensions & read/download manga")
+    println("  mihon extension install [query]     Browse & install extensions from Keiyoushi store")
+    println("  mihon search <query>                Search manga across all installed sources\n")
+    println("DIRECT CLI COMMANDS:")
+    println("  mihon extension list --remote       List available extensions from Keiyoushi store")
+    println("  mihon extension uninstall <pkg>     Remove installed extension")
+    println("  mihon info <manga-url> [-s source]  Display manga details and chapter list")
+    println("  mihon download <url> -c <ch> [-s]   Download chapters to CBZ (or folder)")
+    println("  mihon read <url> -c <ch> [-s]       Download and open chapter directly in viewer")
+    println("  mihon help                          Show this help manual\n")
     println("EXAMPLES:")
-    println("  mihon extension list --remote -q mangadex")
-    println("  mihon extension install eu.kanade.tachiyomi.extension.en.mangadex")
+    println("  mihon                               (Interactive main menu)")
+    println("  mihon extension list                (Interactive extension & manhwa browser)")
+    println("  mihon extension install             (Browse all downloadable extensions)")
+    println("  mihon extension install manhwa      (Search and install manhwa extensions)")
     println("  mihon search \"Chainsaw Man\"")
-    println("  mihon info \"/title/a7774250-d070-49ee-8de8-f1b7ed717975\" -s MangaDex")
-    println("  mihon download \"/title/a7774250-d070-49ee-8de8-f1b7ed717975\" -c 1 -s MangaDex")
-    println("  mihon read \"/title/a7774250-d070-49ee-8de8-f1b7ed717975\" -c 1 -s MangaDex")
 }

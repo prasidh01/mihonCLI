@@ -23,34 +23,44 @@ Mihon CLI allows you to connect directly to the [Keiyoushi Extensions Repository
 
 It achieves this through an **in-memory Dalvik-to-JVM bytecode transpiler** and Android runtime stubs.
 
+### Interactive Android Experience in Terminal
+Run `./mihon` (or `extension list` / `extension install`) to access the interactive navigation experience:
+- **`extension install`**: Shows all available extensions from Keiyoushi store to download, with keyword search, language filtering, pagination, and 1-click install.
+- **`extension list`**: Shows installed extensions -> select any extension -> browse popular manga/manhwa, latest updates, or search titles -> view full synopsis & chapters -> read in desktop viewer or download to CBZ!
+
 ### Quick Start
-An executable script is included in the root directory:
 ```bash
-./mihon help
+# Launch interactive Mihon dashboard
+./mihon
+
+# Or browse installed extensions directly
+extension list
+
+# Or browse & install from Keiyoushi extension store
+extension install
 ```
 
-### Essential Commands
+### Essential CLI Commands
 ```bash
 # 1. Search and install extensions from Keiyoushi repo
-./mihon extension list --remote -q mangadex
-./mihon extension install eu.kanade.tachiyomi.extension.all.mangadex
-./mihon extension install eu.kanade.tachiyomi.extension.en.asurascans
+./mihon extension install asura
+./mihon extension install mangadex
 
 # 2. View installed sources
 ./mihon sources
 
 # 3. Search manga across installed sources
 ./mihon search "Chainsaw Man"
-./mihon search "One Piece"
+./mihon search "Solo Leveling"
 
 # 4. View manga metadata and available chapters
-./mihon info "/manga/e896c48c-3150-437d-ba57-d8567eb399ae" -s "MangaDex"
+./mihon info "/series/127" -s "Flame Comics"
 
 # 5. Download chapter(s) to CBZ with ComicInfo.xml metadata
-./mihon download "/manga/e896c48c-3150-437d-ba57-d8567eb399ae" -c 1 -s "MangaDex"
+./mihon download "/series/127" -c 1 -s "Flame Comics"
 
 # 6. Read chapter in desktop viewer (imv, zathura, or system default)
-./mihon read "/manga/e896c48c-3150-437d-ba57-d8567eb399ae" -c 1 -s "MangaDex"
+./mihon read "/series/127" -c 1 -s "Flame Comics"
 ```
 
 For full documentation and technical details, see the [CLI Documentation](./cli/README.md).

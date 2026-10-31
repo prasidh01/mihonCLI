@@ -1,16 +1,54 @@
 # Mihon CLI
 
-A standalone, pure Kotlin/JVM desktop CLI tool that connects Mihon to the [Keiyoushi Extensions Repository](https://keiyoushi.github.io/docs/guides/getting-started). It allows browsing, downloading, and executing Android Keiyoushi extensions directly on desktop Linux, macOS, and Windows without needing an Android emulator or the Android SDK.
+A standalone, pure Kotlin/JVM desktop CLI and interactive TUI that brings the full Mihon Android manga experience to desktop Linux, macOS, and Windows. It connects directly to the [Keiyoushi Extensions Repository](https://keiyoushi.github.io/docs/guides/getting-started), allowing you to browse, search, download, and read manga, manhwa, and webtoons without an emulator or the Android SDK.
+
+---
+
+## 📱 Android Experience in the Terminal
+
+Mihon CLI features an interactive terminal workflow designed to mirror the Mihon Android app:
+
+```
+================================================================================
+  Mihon - Android Manga Experience on Desktop
+  Select an option to begin
+================================================================================
+  [1] Browse Manga / Manhwa (Choose from installed extensions)
+  [2] Extension Store (Browse & install extensions from Keiyoushi)
+  [3] Quick Search (Search across all installed sources)
+  [4] Manage Extensions (View installed extensions / uninstall)
+  [h] CLI Help (Show command-line usage manual)
+  [q] Quit (Exit Mihon)
+```
+
+### 1. Interactive Manga & Manhwa Browsing (`extension list` or `mihon extension list`)
+Typing `extension list` presents an interactive navigation flow matching the Android app:
+1. **Choose an Extension:** Displays all installed extensions with source and language details (e.g. Asura Scans, Flame Comics, MangaDex).
+2. **Choose Source Options:**
+   - **Popular Manga / Manhwa:** Browse trending and top titles with pagination.
+   - **Latest Updates:** View recently updated series.
+   - **Search Manga / Manhwa:** Search titles within that specific extension.
+3. **Select a Title:** Displays full details (Author, Artist, Status, Genres, Synopsis, Total chapters).
+4. **Read or Download:**
+   - **`[r]` Read Chapter:** Download chapter on-the-fly and launch your desktop viewer (`imv`, `zathura`, `feh`, `xdg-open`).
+   - **`[d]` Download Chapter(s):** Download single chapters, ranges (e.g. `1-10`), or `all` chapters into `.cbz` comic book archives.
+   - **`[l]` List Chapters:** Paginate and browse all chapters.
+
+### 2. Interactive Extension Store (`extension install` or `mihon extension install`)
+Typing `extension install` displays all available extensions in the Keiyoushi repository (~1,440+ extensions):
+- **Browse & Paginate:** View numbered extensions, version numbers, package IDs, and language codes.
+- **Search & Filter:** Press `[s]` to search by keyword (e.g. `manhwa`, `asura`, `flame`), or `[l]` to filter by language (`en`, `ko`, `ja`, etc.).
+- **1-Click Install:** Enter the number of any extension to download, transpile, and install it.
+- **Immediate Browsing:** Automatically prompts you to start browsing manga in the newly installed extension right away.
 
 ---
 
 ## Features
 
 - **On-the-Fly Bytecode Transpilation:** Translates Android Dalvik bytecode (`classes.dex` inside `.apk` extensions) into standard JVM bytecode in memory using `dex-translator` and ASM tree transformation.
-- **Bytecode Repair Pipeline:** Automatically repairs Kotlin value-class name mangling, synthesizes missing constructors for abstract classes/interfaces, fixes obfuscated companion/singleton field assignments, and handles asset loading.
+- **Bytecode Repair Pipeline:** Automatically repairs Kotlin value-class name mangling, synthesizes missing constructors for abstract classes/interfaces, fixes obfuscated companion/singleton field assignments, provides no-op comparators, and handles asset loading.
 - **Embedded Android Compatibility Runtime:** Minimal, zero-overhead stubs for `android.content.Context`, `ContextWrapper`, `Application`, `SharedPreferences` (JSON-backed persistence), `androidx.preference.Preferences`, `android.os.Build`, and `eu.kanade.tachiyomi.AppInfo`.
 - **Keiyoushi Store Integration:** Decodes the compressed Keiyoushi repository index (`index.pb`) covering 1,440+ extensions and thousands of manga sources.
-- **Manga Search & Catalog:** Query single or multiple manga sources concurrently with paginated results and formatted tables.
 - **CBZ Downloader:** Concurrently downloads manga chapter images with rate limiting, retries, and natural sort order, packaging them into valid `.cbz` comic book archives complete with `ComicInfo.xml` metadata.
 - **Integrated Reader Launcher:** Directly launches local image/comic viewers (`imv`, `zathura`, `feh`, or `xdg-open`) for downloaded chapters.
 
@@ -22,116 +60,55 @@ A standalone, pure Kotlin/JVM desktop CLI tool that connects Mihon to the [Keiyo
 - JDK 17 or JDK 21+
 
 ### Quick Run
-An executable script is provided in the repository root:
 ```bash
-./mihon help
+# Launch interactive dashboard
+./mihon
+
+# Or run extension commands directly
+extension list
+extension install
 ```
-*(On first execution, it automatically builds the distribution via Gradle).*
 
 ### Manual Build
 ```bash
-# Compile and run test suite
-./gradlew :cli:test
-
-# Build runnable distribution
 ./gradlew :cli:installDist
-
-# Run directly
-./cli/build/install/cli/bin/cli help
 ```
 
 ---
 
-## Commands & Usage
+## CLI Commands Reference
 
-### 1. Extensions Management
+Both interactive and scripted non-interactive execution are fully supported:
+
+### Extensions
 ```bash
-# Browse available extensions from Keiyoushi
-./mihon extension list --remote -q mangadex
-./mihon extension list --remote -q asura
+# Interactive store browser (shows all available extensions)
+mihon extension install
 
-# Install an extension from Keiyoushi
-./mihon extension install eu.kanade.tachiyomi.extension.all.mangadex
-./mihon extension install eu.kanade.tachiyomi.extension.en.asurascans
+# Search store and install
+mihon extension install asura
 
-# List installed extensions and their sources
-./mihon sources
-# or
-./mihon extension list
+# Interactive installed extensions & manga browser
+mihon extension list
 
-# Uninstall an extension
-./mihon extension uninstall eu.kanade.tachiyomi.extension.all.mangadex
+# Non-interactive remote listing
+mihon extension list --remote -q mangadex --no-interactive
+
+# Uninstall extension
+mihon extension uninstall eu.kanade.tachiyomi.extension.en.asurascans
 ```
 
-### 2. Searching Manga
+### Search & Read
 ```bash
-# Search across installed sources (English prioritized by default)
-./mihon search "Chainsaw Man"
-./mihon search "One Piece"
+# Search across installed sources
+mihon search "Chainsaw Man"
 
-# Search a specific source
-./mihon search "Swordmaster" -s "Asura Scans"
+# View details for a specific manga URL
+mihon info "/series/127" -s "Flame Comics"
 
-# Pagination
-./mihon search "Romance" -s "MangaDex" --page 2
+# Download chapter to CBZ
+mihon download "/series/127" -c 1 -s "Flame Comics"
+
+# Read chapter in viewer
+mihon read "/series/127" -c 1 -s "Flame Comics"
 ```
-
-### 3. Manga Details & Chapters
-```bash
-# View manga details, synopsis, and chapter listing
-./mihon info "/manga/e896c48c-3150-437d-ba57-d8567eb399ae" -s "MangaDex"
-./mihon info "/series/star-embracing-swordmaster" -s "Asura Scans"
-```
-
-### 4. Downloading Chapters
-```bash
-# Download a specific chapter to .cbz
-./mihon download "/series/star-embracing-swordmaster" -c "144" -s "Asura Scans"
-
-# Download a range of chapters
-./mihon download "/series/star-embracing-swordmaster" -c "140-144" -s "Asura Scans"
-
-# Download the latest chapter
-./mihon download "/series/star-embracing-swordmaster" -c latest -s "Asura Scans"
-
-# Download all chapters
-./mihon download "/manga/e896c48c-3150-437d-ba57-d8567eb399ae" -c all -s "MangaDex"
-
-# Custom destination directory
-./mihon download "/series/star-embracing-swordmaster" -c "144" -s "Asura Scans" --dest ~/Manga
-
-# Keep raw image files instead of CBZ
-./mihon download "/series/star-embracing-swordmaster" -c "144" -s "Asura Scans" --raw
-```
-
-### 5. Reading Chapters
-```bash
-# Downloads (if not cached) and opens in your system's viewer
-./mihon read "/series/star-embracing-swordmaster" -c "144" -s "Asura Scans"
-
-# Specify a custom viewer (e.g., imv, zathura, feh)
-./mihon read "/series/star-embracing-swordmaster" -c "144" -s "Asura Scans" -v imv
-```
-
----
-
-## File Storage Locations
-
-- **Extensions:** `~/.local/share/mihon/extensions/`
-- **Preferences:** `~/.local/share/mihon/prefs/`
-- **Transpiled Bytecode Cache:** `~/.local/share/mihon/cache/`
-- **Default Download Destination:** `~/Manga/<Manga Title>/<Chapter Name>.cbz`
-
----
-
-## Testing
-
-Run the test suite with:
-```bash
-./gradlew :cli:test
-```
-Includes:
-- `KeiyoushiRepoTest`: Protobuf repository parsing.
-- `ExtensionInstantiationTest`: Transpilation and dynamic class loading.
-- `SourceExecutionLiveTest`: Live network query verification.
-- `CbzPackagerTest`: Natural sorting, archive integrity, and `ComicInfo.xml` validation.
