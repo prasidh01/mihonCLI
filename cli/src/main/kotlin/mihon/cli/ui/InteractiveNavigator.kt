@@ -393,11 +393,11 @@ object InteractiveNavigator {
                 println("  Recent Chapters:")
                 for (i in 0 until previewCount) {
                     val ch = allChapters[i]
-                    val rowStr = (i + 1).toString().padStart(2)
+                    val chNum = getDisplayChapterNumber(ch, i + 1)
+                    val numStr = chNum.padStart(5)
                     val dateStr = if (ch.date_upload > 0) dateFormat.format(Date(ch.date_upload)) else ""
-                    val numInfo = if (ch.chapter_number >= 0) "Ch. ${formatChapterNum(ch.chapter_number)}" else ""
-                    val extra = listOf(numInfo, dateStr).filter { it.isNotBlank() }.joinToString(" • ")
-                    println("    ${TerminalUi.yellow("[$rowStr]")} ${ch.name} ${TerminalUi.dim("($extra)")}")
+                    val extra = if (dateStr.isNotBlank()) " • $dateStr" else ""
+                    println("    ${TerminalUi.yellow("[$numStr]")} ${ch.name}${TerminalUi.dim(extra)}")
                 }
                 if (allChapters.size > previewCount) {
                     println("    ${TerminalUi.dim("... and ${allChapters.size - previewCount} earlier chapters. Use [l] to list all.")}")
@@ -644,22 +644,23 @@ object InteractiveNavigator {
             TerminalUi.subHeader("Chapters for ${manga.title} (Page $page of $totalPages)")
             for ((idx, ch) in pageChapters.withIndex()) {
                 val globalIdx = startIndex + idx + 1
-                val numStr = globalIdx.toString().padStart(3)
+                val chNum = getDisplayChapterNumber(ch, globalIdx)
+                val numStr = chNum.padStart(5)
                 val dateStr = if (ch.date_upload > 0) dateFormat.format(Date(ch.date_upload)) else ""
-                val chNum = if (ch.chapter_number >= 0) "Ch. ${formatChapterNum(ch.chapter_number)}" else ""
-                println("  ${TerminalUi.yellow("[$numStr]")} ${ch.name} ${TerminalUi.dim("($chNum • $dateStr)")}")
+                val extra = if (dateStr.isNotBlank()) " • $dateStr" else ""
+                println("  ${TerminalUi.yellow("[$numStr]")} ${ch.name}${TerminalUi.dim(extra)}")
             }
 
             TerminalUi.divider()
             val navParts = mutableListOf<String>()
-            navParts.add("${TerminalUi.yellow("[1-${allChapters.size}]")} Read #")
+            navParts.add("${TerminalUi.yellow("[Chapter #]")} Read")
             if (page < totalPages) navParts.add("${TerminalUi.yellow("[n]")} Next")
             if (page > 1) navParts.add("${TerminalUi.yellow("[p]")} Prev")
             navParts.add("${TerminalUi.yellow("[d]")} Download spec")
             navParts.add("${TerminalUi.yellow("[b]")} Back")
             println("  Actions: ${navParts.joinToString(" | ")}")
 
-            val input = TerminalUi.promptChoice("\nEnter choice", default = if (page < totalPages) "n" else "b").lowercase()
+            val input = TerminalUi.promptChoice("\nEnter chapter number or action", default = if (page < totalPages) "n" else "b").lowercase()
             when (input) {
                 "b", "q" -> return
                 "n" -> if (page < totalPages) page++
@@ -926,7 +927,7 @@ object InteractiveNavigator {
         }
     }
 
-    private fun resolveChapter(chapters: List<SChapter>, spec: String): SChapter? {
+    fun resolveChapter(chapters: List<SChapter>, spec: String): SChapter? {
         val s = spec.trim().lowercase()
         if (s.isEmpty() || s == "latest") {
             return chapters.firstOrNull()
@@ -940,21 +941,46 @@ object InteractiveNavigator {
             }
         }
 
-        // Check exact chapter number float match e.g. "105" or "105.5"
+        // 1. Check exact chapter number float match e.g. "105" or "105.5"
         val fNum = s.toFloatOrNull()
         if (fNum != null) {
             val byNum = chapters.find { it.chapter_number == fNum }
             if (byNum != null) return byNum
+
+            // Match extracted number from chapter name e.g. "Chapter 105"
+            val byRegex = chapters.find { ch ->
+                val match = Regex("(?:ch\\.?|chapter|#)\\s*([0-9]+(?:\\.[0-9]+)?)", RegexOption.IGNORE_CASE).find(ch.name)
+                match?.groupValues?.get(1)?.toFloatOrNull() == fNum
+            }
+            if (byRegex != null) return byRegex
         }
 
-        // Check 1-based row index fallback if in range
+        // 2. Check exact chapter name match
+        val byExactName = chapters.find { it.name.trim().lowercase() == s }
+        if (byExactName != null) return byExactName
+
+        // 3. Check substring in chapter name or url
+        val bySub = chapters.find { it.name.lowercase().contains(s) || it.url.lowercase().contains(s) }
+        if (bySub != null) return bySub
+
+        // 4. Only fallback to 1-based row index if no chapter matched above
         val idx = s.toIntOrNull()
         if (idx != null && idx in 1..chapters.size) {
             return chapters[idx - 1]
         }
 
-        // Check substring in chapter name or url
-        return chapters.find { it.name.lowercase().contains(s) || it.url.lowercase().contains(s) }
+        return null
+    }
+
+    private fun getDisplayChapterNumber(ch: SChapter, fallbackIndex: Int): String {
+        if (ch.chapter_number >= 0) {
+            return formatChapterNum(ch.chapter_number)
+        }
+        val match = Regex("(?:ch\\.?|chapter|#)\\s*([0-9]+(?:\\.[0-9]+)?)", RegexOption.IGNORE_CASE).find(ch.name)
+        if (match != null) {
+            return match.groupValues[1]
+        }
+        return fallbackIndex.toString()
     }
 
     private fun filterChapters(chapters: List<SChapter>, spec: String): List<SChapter> {

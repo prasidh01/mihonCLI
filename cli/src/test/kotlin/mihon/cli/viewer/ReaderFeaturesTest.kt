@@ -43,6 +43,40 @@ class ReaderFeaturesTest {
     }
 
     @Test
+    fun `resolveChapter matches user input by chapter number rather than row index`() {
+        // Chapters arranged newest-first: row 1 is Ch 3, row 3 is Ch 1
+        val ch3 = SChapter.create().apply {
+            url = "/ch3"
+            name = "Chapter 3"
+            chapter_number = 3f
+        }
+        val ch2 = SChapter.create().apply {
+            url = "/ch2"
+            name = "Chapter 2"
+            chapter_number = 2f
+        }
+        val ch1 = SChapter.create().apply {
+            url = "/ch1"
+            name = "Chapter 1"
+            chapter_number = 1f
+        }
+
+        val chapters = listOf(ch3, ch2, ch1)
+
+        // User enters "1" expecting Chapter 1 (not row 1 which is Chapter 3)
+        val resolved1 = InteractiveNavigator.resolveChapter(chapters, "1")
+        assertNotNull(resolved1)
+        assertEquals("Chapter 1", resolved1?.name)
+        assertEquals(1f, resolved1?.chapter_number)
+
+        // User enters "3" expecting Chapter 3
+        val resolved3 = InteractiveNavigator.resolveChapter(chapters, "3")
+        assertNotNull(resolved3)
+        assertEquals("Chapter 3", resolved3?.name)
+        assertEquals(3f, resolved3?.chapter_number)
+    }
+
+    @Test
     fun `LongstripViewer generates zero-gap HTML with natural image order`(@TempDir tempDir: File) {
         val img1 = File(tempDir, "001.jpg").apply { writeBytes(byteArrayOf(1, 2, 3)) }
         val img2 = File(tempDir, "002.jpg").apply { writeBytes(byteArrayOf(4, 5, 6)) }
