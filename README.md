@@ -28,6 +28,7 @@ Run `./mihon` (or `extension list` / `extension install`) to access the interact
 - **`extension install`**: Shows all available extensions from Keiyoushi store to download, with keyword search, language filtering, pagination, and 1-click install.
 - **`extension list`**: Shows installed extensions -> select any extension -> browse popular manga/manhwa, latest updates, or search titles -> view full synopsis & chapters -> read or download!
 - **Longstrip Viewing (Webtoon Mode)**: Seamless continuous vertical scrolling with 0px gaps and zero pagebreaks for Manhwa.
+- **Hands-Free Auto-Scroll**: Toggle continuous smooth reading with `CapsLock` and adjust speed on the fly with `Super` + `+` / `-`.
 - **Auto-Cleanup**: Chapters read are automatically deleted from your system 5 minutes after finishing reading.
 - **Auto Next Chapter**: Automatically advances directly into the next chronological chapter upon closing the current chapter.
 

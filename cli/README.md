@@ -51,8 +51,12 @@ Typing `extension install` displays all available extensions in the Keiyoushi re
 ### 🌟 Longstrip (Webtoon) Mode
 Manhwa and Webtoons are designed to be read vertically as one continuous canvas. Mihon CLI's Longstrip mode:
 - **Zero Gaps & Zero Pagebreaks:** Seamlessly stacks panels vertically with 0px margins.
+- **Automatic Smooth Scroll:** Press <kbd>CapsLock</kbd> to toggle butter-smooth hands-free reading.
+- **Scroll Speed Controls:** Press <kbd>Super</kbd> + <kbd>+</kbd> / <kbd>-</kbd> (or direct <kbd>+</kbd> / <kbd>-</kbd>) to increase or decrease scroll speed with live HUD visual feedback.
 - **Progress Tracking:** Floating status pill and top progress bar indicating scroll percentage.
 - **Full Keyboard Navigation:**
+  - `CapsLock`: Toggle automatic smooth scroll
+  - `Super` + `+` / `-`: Increase / decrease scroll speed
   - `J` / `↓`: Smooth scroll down
   - `K` / `↑`: Smooth scroll up
   - `Space` / `PageDown`: Page down
