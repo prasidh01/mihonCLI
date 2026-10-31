@@ -15,12 +15,13 @@ BIN="$DIR/cli/build/install/cli/bin/cli"
 NEEDS_BUILD=0
 if [ ! -f "$BIN" ]; then
     NEEDS_BUILD=1
-elif [ -n "$(find "$DIR/cli/src" -newer "$BIN" 2>/dev/null | head -n 1)" ]; then
+elif [ -n "$(find "$DIR/cli/src" "$DIR/cli/build.gradle.kts" -newer "$BIN" 2>/dev/null | head -n 1)" ]; then
     NEEDS_BUILD=1
 fi
 
 if [ "$NEEDS_BUILD" -eq 1 ]; then
     (cd "$DIR" && ./gradlew :cli:installDist -q)
+    touch "$BIN"
 fi
 
 exec "$BIN" "$@"

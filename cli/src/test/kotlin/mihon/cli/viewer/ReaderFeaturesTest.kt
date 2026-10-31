@@ -131,4 +131,13 @@ class ReaderFeaturesTest {
 
         assertFalse(target.exists(), "Target directory must be deleted after scheduled delay")
     }
+
+    @Test
+    fun `ReadingMode enum values and entries are accessible`() {
+        assertEquals("Longstrip (Continuous Vertical / Manhwa Webtoon)", ReadingMode.LONGSTRIP.label)
+        assertEquals("Standard Paginated (Single Page / imv)", ReadingMode.PAGINATED.label)
+        assertEquals(2, ReadingMode.entries.size)
+        assertEquals(ReadingMode.LONGSTRIP, ReadingMode.valueOf("LONGSTRIP"))
+        assertEquals(ReadingMode.PAGINATED, ReadingMode.valueOf("PAGINATED"))
+    }
 }
