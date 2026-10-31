@@ -140,4 +140,19 @@ class ReaderFeaturesTest {
         assertEquals(ReadingMode.LONGSTRIP, ReadingMode.valueOf("LONGSTRIP"))
         assertEquals(ReadingMode.PAGINATED, ReadingMode.valueOf("PAGINATED"))
     }
+
+    @Test
+    fun `ViewerLauncher encodes file URI with special characters and spaces`(@TempDir tempDir: File) {
+        val specialDir = File(tempDir, "The Regressed Mercenary’s Machinations/Chapter 1").apply { mkdirs() }
+        val htmlFile = File(specialDir, "index.html").apply { writeText("<h1>Test</h1>") }
+
+        val cmd = ViewerLauncher.buildCommand(htmlFile)
+        val appArg = cmd.find { it.startsWith("--app=") }
+        assertNotNull(appArg, "Command must contain --app flag for browser")
+        assertTrue(appArg!!.startsWith("--app=file://"))
+        // Must contain percent-encoded spaces and unicode
+        assertTrue(appArg.contains("%20"), "URL must percent-encode spaces")
+        assertTrue(appArg.contains("%E2%80%99") || !appArg.contains("’"), "URL must percent-encode smart quotes")
+        assertFalse(appArg.contains(" "), "URL must not contain raw spaces")
+    }
 }

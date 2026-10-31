@@ -25,7 +25,7 @@ object ViewerLauncher {
         return processBuilder.start()
     }
 
-    private fun buildCommand(target: File, customViewer: String?): List<String> {
+    internal fun buildCommand(target: File, customViewer: String? = null): List<String> {
         val isHtml = target.isFile && (target.name.endsWith(".html", ignoreCase = true) || target.name.endsWith(".htm", ignoreCase = true))
         val isCbz = target.isFile && target.name.endsWith(".cbz", ignoreCase = true)
 
@@ -41,20 +41,27 @@ object ViewerLauncher {
 
         // 1. HTML Longstrip mode
         if (isHtml) {
+            val rawUri = target.toURI().toASCIIString()
+            val fileUri = if (rawUri.startsWith("file:/") && !rawUri.startsWith("file:///")) {
+                "file:///" + rawUri.removePrefix("file:/")
+            } else {
+                rawUri
+            }
             val profileDir = File(System.getProperty("user.home"), ".cache/mihon/reader-profile").apply { mkdirs() }
             for (b in KNOWN_APP_BROWSERS) {
                 if (isExecutableAvailable(b)) {
                     return listOf(
                         b,
                         "--user-data-dir=${profileDir.absolutePath}",
-                        "--app=file://${target.absolutePath}",
-                        "--log-level=3",
+                        "--app=$fileUri",
+                        "--no-first-run",
+                        "--no-default-browser-check",
                         "--disable-sync",
                     )
                 }
             }
             if (isExecutableAvailable("firefox")) {
-                return listOf("firefox", "--new-window", target.absolutePath)
+                return listOf("firefox", "--new-window", fileUri)
             }
             if (isExecutableAvailable("xdg-open")) {
                 return listOf("xdg-open", target.absolutePath)
