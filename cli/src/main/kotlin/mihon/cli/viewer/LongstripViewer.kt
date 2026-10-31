@@ -89,9 +89,9 @@ object LongstripViewer {
             position: fixed;
             top: 12px;
             right: 20px;
-            background: rgba(18, 18, 18, 0.85);
-            backdrop-filter: blur(8px);
-            border: 1px solid rgba(255, 255, 255, 0.1);
+            background: rgba(18, 18, 18, 0.88);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.12);
             border-radius: 20px;
             padding: 6px 16px;
             font-size: 13px;
@@ -101,8 +101,8 @@ object LongstripViewer {
             display: flex;
             align-items: center;
             gap: 10px;
-            box-shadow: 0 4px 16px rgba(0,0,0,0.6);
-            opacity: 0.85;
+            box-shadow: 0 4px 18px rgba(0,0,0,0.65);
+            opacity: 0.92;
             transition: opacity 0.3s ease;
         }
         #floating-header:hover {
@@ -111,14 +111,111 @@ object LongstripViewer {
         .header-title {
             color: #ffffff;
             font-weight: 600;
+            max-width: 260px;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
         }
         .header-badge {
             background: #2a3b4c;
             color: #64b5f6;
-            padding: 2px 8px;
-            border-radius: 10px;
+            padding: 3px 9px;
+            border-radius: 12px;
             font-size: 11px;
             font-weight: bold;
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            user-select: none;
+        }
+        .scroll-badge {
+            cursor: pointer;
+            background: #242424;
+            color: #aaa;
+            border: 1px solid #383838;
+            transition: all 0.2s ease;
+        }
+        .scroll-badge:hover {
+            background: #2e2e2e;
+            color: #fff;
+        }
+        .scroll-badge.active {
+            background: #064e3b;
+            color: #34d399;
+            border-color: #059669;
+            box-shadow: 0 0 10px rgba(52, 211, 153, 0.35);
+        }
+        .led-dot {
+            width: 7px;
+            height: 7px;
+            border-radius: 50%;
+            background: #666;
+            display: inline-block;
+            transition: all 0.2s ease;
+        }
+        .scroll-badge.active .led-dot {
+            background: #34d399;
+            box-shadow: 0 0 6px #34d399;
+        }
+        .speed-control-group {
+            display: inline-flex;
+            align-items: center;
+            background: rgba(255, 255, 255, 0.08);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 12px;
+            padding: 1px 3px;
+            gap: 2px;
+        }
+        .speed-btn {
+            background: transparent;
+            border: none;
+            color: #bbb;
+            font-size: 13px;
+            font-weight: bold;
+            cursor: pointer;
+            width: 20px;
+            height: 20px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 4px;
+            transition: background 0.15s, color 0.15s;
+        }
+        .speed-btn:hover {
+            background: rgba(255, 255, 255, 0.2);
+            color: #fff;
+        }
+        #speed-label {
+            font-size: 11px;
+            font-weight: 700;
+            color: #e0e0e0;
+            min-width: 32px;
+            text-align: center;
+            user-select: none;
+        }
+        /* Center Toast / HUD notification */
+        #hud-toast {
+            position: fixed;
+            top: 60px;
+            left: 50%;
+            transform: translateX(-50%) translateY(-10px);
+            background: rgba(18, 18, 18, 0.94);
+            backdrop-filter: blur(12px);
+            color: #ffffff;
+            border: 1px solid rgba(0, 210, 255, 0.5);
+            box-shadow: 0 8px 30px rgba(0, 0, 0, 0.7);
+            padding: 8px 22px;
+            border-radius: 20px;
+            font-size: 14px;
+            font-weight: 600;
+            z-index: 10000;
+            pointer-events: none;
+            opacity: 0;
+            transition: opacity 0.2s cubic-bezier(0.16, 1, 0.3, 1), transform 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+        }
+        #hud-toast.show {
+            opacity: 1;
+            transform: translateX(-50%) translateY(0);
         }
         /* Container for Longstrip Images */
         .strip-container {
@@ -204,11 +301,21 @@ object LongstripViewer {
 </head>
 <body>
     <div id="progress-bar"></div>
+    <div id="hud-toast"></div>
     <div id="floating-header">
         <span class="header-title">$escapedTitle</span>
         <span>•</span>
         <span>$escapedChapter</span>
         <span class="header-badge" id="percent-badge">0%</span>
+        <div class="header-badge scroll-badge" id="scroll-badge" onclick="toggleAutoScroll()" title="Press CapsLock to toggle auto-scroll (Super +/- to adjust speed)">
+            <span class="led-dot"></span>
+            <span id="scroll-status">AUTO OFF</span>
+        </div>
+        <div class="speed-control-group">
+            <button class="speed-btn" onclick="adjustSpeed(-0.25)" title="Super + - (Decrease speed)">−</button>
+            <span id="speed-label">1.5x</span>
+            <button class="speed-btn" onclick="adjustSpeed(0.25)" title="Super + + (Increase speed)">+</button>
+        </div>
     </div>
 
     <div class="strip-container" id="strip-container">
@@ -218,10 +325,12 @@ $imagesHtml
     $nextCardHtml
 
     <div class="keyboard-hints" style="text-align: center; padding-bottom: 40px; background: #141414;">
+        <span class="key">CapsLock</span> Auto-Scroll &nbsp;|&nbsp;
+        <span class="key">Super</span>+<span class="key">+</span>/<span class="key">-</span> Speed &nbsp;|&nbsp;
         <span class="key">J</span> / <span class="key">↓</span> Scroll Down &nbsp;|&nbsp;
         <span class="key">K</span> / <span class="key">↑</span> Scroll Up &nbsp;|&nbsp;
         <span class="key">Space</span> Page Down &nbsp;|&nbsp;
-        <span class="key">W</span> Width Toggle &nbsp;|&nbsp;
+        <span class="key">W</span> Width &nbsp;|&nbsp;
         <span class="key">F</span> Fullscreen &nbsp;|&nbsp;
         <span class="key">Q</span> / <span class="key">Esc</span> Close
     </div>
@@ -249,8 +358,149 @@ $imagesHtml
             document.getElementById('strip-container').style.maxWidth = widths[widthMode];
         }
 
+        // --- Smooth Auto-Scroll & Speed Controller ---
+        let autoScrollActive = false;
+        let speedMultiplier = 1.5;
+        let lastScrollTimestamp = 0;
+        let scrollSubpixelAccumulator = 0;
+        let hudTimeout = null;
+
+        function showToast(message, isAccent = true) {
+            const toast = document.getElementById('hud-toast');
+            if (!toast) return;
+            toast.innerText = message;
+            if (isAccent) {
+                toast.style.borderColor = 'rgba(0, 210, 255, 0.6)';
+                toast.style.color = '#00d2ff';
+            } else {
+                toast.style.borderColor = 'rgba(255, 255, 255, 0.2)';
+                toast.style.color = '#cccccc';
+            }
+            toast.classList.add('show');
+            clearTimeout(hudTimeout);
+            hudTimeout = setTimeout(() => {
+                toast.classList.remove('show');
+            }, 1400);
+        }
+
+        function updateSpeedUi() {
+            const label = document.getElementById('speed-label');
+            if (label) {
+                label.innerText = speedMultiplier.toFixed(2).replace(/\.?0+$/, '') + 'x';
+            }
+            const status = document.getElementById('scroll-status');
+            if (status && autoScrollActive) {
+                status.innerText = 'AUTO ' + label.innerText;
+            }
+        }
+
+        function setAutoScroll(active, reason) {
+            autoScrollActive = active;
+            const badge = document.getElementById('scroll-badge');
+            const status = document.getElementById('scroll-status');
+            const speedText = speedMultiplier.toFixed(2).replace(/\.?0+$/, '') + 'x';
+            const pxSec = Math.round(speedMultiplier * 60);
+
+            if (autoScrollActive) {
+                if (badge) badge.classList.add('active');
+                if (status) status.innerText = 'AUTO ' + speedText;
+                document.documentElement.style.scrollBehavior = 'auto'; // Instant micro-steps for silky 144Hz smoothness
+                showToast('Auto-Scroll: ON (' + speedText + ' • ' + pxSec + ' px/s)');
+                lastScrollTimestamp = 0;
+                scrollSubpixelAccumulator = 0;
+                requestAnimationFrame(scrollLoop);
+            } else {
+                if (badge) badge.classList.remove('active');
+                if (status) status.innerText = 'AUTO OFF';
+                document.documentElement.style.scrollBehavior = 'smooth';
+                showToast(reason || 'Auto-Scroll: PAUSED', false);
+            }
+        }
+
+        function toggleAutoScroll() {
+            setAutoScroll(!autoScrollActive);
+        }
+
+        function adjustSpeed(delta) {
+            if (delta > 0) {
+                if (speedMultiplier < 1.0) speedMultiplier += 0.25;
+                else if (speedMultiplier < 3.0) speedMultiplier += 0.25;
+                else speedMultiplier += 0.5;
+            } else {
+                if (speedMultiplier > 3.0) speedMultiplier -= 0.5;
+                else if (speedMultiplier > 1.0) speedMultiplier -= 0.25;
+                else speedMultiplier -= 0.25;
+            }
+            speedMultiplier = Math.max(0.25, Math.min(8.0, Math.round(speedMultiplier * 100) / 100));
+            updateSpeedUi();
+            const speedText = speedMultiplier.toFixed(2).replace(/\.?0+$/, '') + 'x';
+            const pxSec = Math.round(speedMultiplier * 60);
+            showToast('Speed: ' + speedText + ' (' + pxSec + ' px/s)');
+        }
+
+        function scrollLoop(timestamp) {
+            if (!autoScrollActive) return;
+
+            if (lastScrollTimestamp > 0) {
+                const dt = (timestamp - lastScrollTimestamp) / 1000;
+                if (dt > 0 && dt < 0.1) {
+                    const pxPerSec = speedMultiplier * 60;
+                    scrollSubpixelAccumulator += dt * pxPerSec;
+                    const pixelsToScroll = Math.floor(scrollSubpixelAccumulator);
+                    if (pixelsToScroll >= 1) {
+                        window.scrollBy(0, pixelsToScroll);
+                        scrollSubpixelAccumulator -= pixelsToScroll;
+                    }
+                }
+            }
+            lastScrollTimestamp = timestamp;
+
+            const maxScroll = (document.documentElement.scrollHeight || document.body.scrollHeight) - window.innerHeight;
+            if (window.scrollY >= maxScroll - 2) {
+                setAutoScroll(false, 'Reached End of Chapter');
+                return;
+            }
+
+            if (autoScrollActive) {
+                requestAnimationFrame(scrollLoop);
+            }
+        }
+
         // Keyboard navigation
         window.addEventListener('keydown', (e) => {
+            // CapsLock toggles auto-scroll
+            if (e.code === 'CapsLock' || e.key === 'CapsLock') {
+                toggleAutoScroll();
+                e.preventDefault();
+                return;
+            }
+
+            // Super / Command / Ctrl + Plus / Minus to adjust speed, plus direct +/- hotkeys
+            const isPlus = e.key === '+' || e.key === '=' || e.code === 'Equal' || e.code === 'NumpadAdd';
+            const isMinus = e.key === '-' || e.key === '_' || e.code === 'Minus' || e.code === 'NumpadSubtract';
+
+            if ((e.metaKey || e.ctrlKey) && isPlus) {
+                adjustSpeed(0.25);
+                e.preventDefault();
+                return;
+            }
+            if ((e.metaKey || e.ctrlKey) && isMinus) {
+                adjustSpeed(-0.25);
+                e.preventDefault();
+                return;
+            }
+            if (!e.metaKey && !e.ctrlKey && !e.altKey && (isPlus || e.key === ']')) {
+                adjustSpeed(0.25);
+                e.preventDefault();
+                return;
+            }
+            if (!e.metaKey && !e.ctrlKey && !e.altKey && (isMinus || e.key === '[')) {
+                adjustSpeed(-0.25);
+                e.preventDefault();
+                return;
+            }
+
+            // Standard navigation
             if (e.key === 'j' || e.key === 'ArrowDown') {
                 window.scrollBy({ top: 220, behavior: 'smooth' });
                 e.preventDefault();

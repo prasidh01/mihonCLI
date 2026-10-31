@@ -107,6 +107,15 @@ class ReaderFeaturesTest {
         assertTrue(content.contains("Solo Leveling"))
         assertTrue(content.contains("Chapter 1"))
         assertTrue(content.contains("Chapter 2"))
+
+        // Verify CapsLock auto-scroll & speed controls
+        assertTrue(content.contains("CapsLock"))
+        assertTrue(content.contains("toggleAutoScroll"))
+        assertTrue(content.contains("adjustSpeed"))
+        assertTrue(content.contains("scrollLoop"))
+        assertTrue(content.contains("hud-toast"))
+        assertTrue(content.contains("speed-control-group"))
+        assertTrue(content.contains("metaKey"))
     }
 
     @Test
